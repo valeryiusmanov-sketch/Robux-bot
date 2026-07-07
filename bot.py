@@ -2,13 +2,13 @@ import telebot
 import sqlite3
 from datetime import datetime
 from flask import Flask, request
+import time
 
-# ===== ТОКЕН =====
 TOKEN = '8684971280:AAH0V29u4vT382wAv28eGr2Bo2OXMi79ERI'
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-# ===== БАЗА ДАННЫХ =====
+# === БАЗА ДАННЫХ ===
 conn = sqlite3.connect('users.db', check_same_thread=False)
 
 def create_table():
@@ -19,7 +19,10 @@ def create_table():
             balance INTEGER DEFAULT 0,
             energy INTEGER DEFAULT 50,
             last_tap_date TEXT,
-            last_bonus_date TEXT
+            last_bonus_date TEXT,
+            last_tap_time INTEGER DEFAULT 0,
+            bonus_claimed INTEGER DEFAULT 0,
+            last_bonus_claim TEXT
         )
     ''')
     conn.commit()
@@ -33,8 +36,8 @@ def get_user(user_id):
     if not user:
         cur2 = conn.cursor()
         cur2.execute('''
-            INSERT INTO users (user_id, balance, energy, last_tap_date, last_bonus_date)
-            VALUES (?, 0, 50, ?, '')
+            INSERT INTO users (user_id, balance, energy, last_tap_date, last_bonus_date, last_tap_time, bonus_claimed, last_bonus_claim)
+            VALUES (?, 0, 50, ?, '', 0, 0, '')
         ''', (user_id, datetime.now().strftime('%Y-%m-%d')))
         conn.commit()
         cur2.close()
@@ -44,7 +47,7 @@ def get_user(user_id):
         cur3.close()
     return user
 
-def update_user(user_id, balance=None, energy=None, last_tap_date=None, last_bonus_date=None):
+def update_user(user_id, balance=None, energy=None, last_tap_date=None, last_bonus_date=None, last_tap_time=None, bonus_claimed=None, last_bonus_claim=None):
     cur = conn.cursor()
     if balance is not None:
         cur.execute('UPDATE users SET balance = ? WHERE user_id = ?', (balance, user_id))
@@ -54,33 +57,72 @@ def update_user(user_id, balance=None, energy=None, last_tap_date=None, last_bon
         cur.execute('UPDATE users SET last_tap_date = ? WHERE user_id = ?', (last_tap_date, user_id))
     if last_bonus_date is not None:
         cur.execute('UPDATE users SET last_bonus_date = ? WHERE user_id = ?', (last_bonus_date, user_id))
+    if last_tap_time is not None:
+        cur.execute('UPDATE users SET last_tap_time = ? WHERE user_id = ?', (last_tap_time, user_id))
+    if bonus_claimed is not None:
+        cur.execute('UPDATE users SET bonus_claimed = ? WHERE user_id = ?', (bonus_claimed, user_id))
+    if last_bonus_claim is not None:
+        cur.execute('UPDATE users SET last_bonus_claim = ? WHERE user_id = ?', (last_bonus_claim, user_id))
     conn.commit()
     cur.close()
 
-# ===== КЛАВИАТУРА =====
+# === ПРОВЕРКА ПОДПИСКИ НА КАНАЛ @robloxtapkanal ===
+def is_subscribed(user_id):
+    channel_username = 'robloxtapkanal'
+    try:
+        member = bot.get_chat_member(f'@{channel_username}', user_id)
+        return member.status in ['member', 'administrator', 'creator']
+    except:
+        return False
+
+# === КЛАВИАТУРЫ ===
 def main_menu():
     keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
     keyboard.add('💲 Тапнуть', '🎁 Бонус дня')
     keyboard.add('📊 Баланс', '💳 Вывести')
     return keyboard
 
-# ===== КОМАНДЫ =====
+def withdraw_menu():
+    keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add('💰 20', '💰 50', '💰 100')
+    keyboard.add('💰 250', '💰 500', '💰 1000')
+    keyboard.add('🔙 Назад')
+    return keyboard
+
+# === КОМАНДА /start ===
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = message.chat.id
     get_user(user_id)
-    bot.send_message(user_id, '⚡ Добро пожаловать!\nНажимай "Тапнуть" и получай Robux.', reply_markup=main_menu())
+    bot.send_message(
+        user_id,
+        '⚡ **Добро пожаловать!**\n\n'
+        '💰 Тапай — получай Robux!\n\n'
+        '⬆️ Нажимай «Тапнуть» — +1 Robux.\n'
+        '📆 До 50 раз в день.\n\n'
+        '🎁 Бонус +50 за подписку @robloxtapkanal.\n\n'
+        '💳 Вывод от 20 Robux.\n\n'
+        '⬇️ Начинай!',
+        parse_mode='Markdown',
+        reply_markup=main_menu()
+    )
 
+# === ТАП С ЗАЩИТОЙ ОТ АВТО-КЛИКЕРОВ ===
 @bot.message_handler(func=lambda message: message.text == '💲 Тапнуть')
 def tap(message):
     user_id = message.chat.id
     user = get_user(user_id)
     today = datetime.now().strftime('%Y-%m-%d')
-    balance, energy, last_tap_date, last_bonus_date = user[1], user[2], user[3], user[4]
+    balance, energy, last_tap_date, last_tap_time = user[1], user[2], user[3], user[5]
 
     if last_tap_date != today:
         energy = 50
         update_user(user_id, energy=energy, last_tap_date=today)
+
+    current_time = int(time.time())
+    if last_tap_time and current_time - last_tap_time < 1:
+        bot.send_message(user_id, '⏳ Подожди 1 секунду между тапами!')
+        return
 
     if energy <= 0:
         bot.send_message(user_id, '⛔ Нет энергии! Жди завтра.')
@@ -88,31 +130,59 @@ def tap(message):
 
     energy -= 1
     balance += 1
-    update_user(user_id, balance=balance, energy=energy)
-    bot.send_message(user_id, f'✅ +1 Robux!\n⚡ Энергия: {energy}/50\n💰 Баланс: {balance} Robux')
+    update_user(user_id, balance=balance, energy=energy, last_tap_time=current_time)
 
+    bot.send_message(
+        user_id,
+        f'✅ +1 Robux!\n'
+        f'⚡ Энергия: {energy}/50\n'
+        f'💰 Баланс: {balance} Robux'
+    )
+
+# === БОНУС ЗА ПОДПИСКУ ===
 @bot.message_handler(func=lambda message: message.text == '🎁 Бонус дня')
 def bonus(message):
     user_id = message.chat.id
     user = get_user(user_id)
     today = datetime.now().strftime('%Y-%m-%d')
-    balance, last_bonus_date = user[1], user[4]
 
-    if last_bonus_date == today:
+    if user[7] == 1 and user[8] == today:
         bot.send_message(user_id, '⛔ Ты уже получил бонус сегодня!')
         return
 
-    balance += 10
-    update_user(user_id, balance=balance, last_bonus_date=today)
-    bot.send_message(user_id, f'🎁 +10 Robux (бонус дня)!\n💰 Баланс: {balance} Robux')
+    if not is_subscribed(user_id):
+        bot.send_message(
+            user_id,
+            '❌ Ты не подписан на канал!\n\n'
+            'Подпишись: @robloxtapkanal\n'
+            'После подписки нажми "🎁 Бонус дня" снова.'
+        )
+        return
 
+    balance = user[1] + 50
+    update_user(user_id, balance=balance, bonus_claimed=1, last_bonus_claim=today)
+
+    bot.send_message(
+        user_id,
+        f'🎉 +50 Robux за подписку!\n'
+        f'💰 Баланс: {balance} Robux'
+    )
+
+# === БАЛАНС ===
 @bot.message_handler(func=lambda message: message.text == '📊 Баланс')
 def show_balance(message):
     user_id = message.chat.id
     user = get_user(user_id)
     balance, energy = user[1], user[2]
-    bot.send_message(user_id, f'📊 Твой баланс:\n💰 {balance} Robux\n⚡ Энергия: {energy}/50')
+    bot.send_message(
+        user_id,
+        f'📊 **Твой баланс:**\n'
+        f'💰 {balance} Robux\n'
+        f'⚡ Энергия: {energy}/50',
+        parse_mode='Markdown'
+    )
 
+# === ВЫВОД С КНОПКАМИ ===
 @bot.message_handler(func=lambda message: message.text == '💳 Вывести')
 def withdraw(message):
     user_id = message.chat.id
@@ -123,21 +193,55 @@ def withdraw(message):
         bot.send_message(user_id, '⛔ Минимальный вывод — 20 Robux.')
         return
 
-    bot.send_message(user_id,
-                     '📹 **Инструкция по установке расширения**\n\n'
-                     '1. Скачай расширение по ссылке:\n'
-                     '👉 https://valeryiusmanov-sketch.github.io/H/\n\n'
-                     '2. Установи в браузере (инструкция в видео).\n\n'
-                     '⚠️ **Важно:**\n'
-                     'После установки расширения **обязательно зайди на официальный сайт Roblox** и войди в аккаунт.\n'
-                     'В течение 3 часов тебе придут Robux.',
-                     parse_mode='Markdown')
+    bot.send_message(
+        user_id,
+        '💳 **Выбери сумму для вывода:**',
+        parse_mode='Markdown',
+        reply_markup=withdraw_menu()
+    )
 
-@bot.message_handler(func=lambda message: message.text == 'Готово')
-def done(message):
-    bot.send_message(message.chat.id, '🔄 Проверка выполняется... Ожидай до 2 минут.\nЕсли Robux не пришли — напиши в поддержку.')
+# === ОБРАБОТКА КНОПОК ВЫВОДА ===
+@bot.message_handler(func=lambda message: message.text.startswith('💰 '))
+def withdraw_amount(message):
+    user_id = message.chat.id
+    user = get_user(user_id)
+    balance = user[1]
 
-# ===== ВЕБХУК =====
+    if message.text == '🔙 Назад':
+        bot.send_message(user_id, '🔙 Возврат в главное меню.', reply_markup=main_menu())
+        return
+
+    try:
+        amount = int(message.text.replace('💰 ', ''))
+    except:
+        bot.send_message(user_id, '❌ Неверная сумма.')
+        return
+
+    if amount < 20:
+        bot.send_message(user_id, '⛔ Минимальный вывод — 20 Robux.')
+        return
+
+    if balance < amount:
+        bot.send_message(user_id, f'⛔ Недостаточно Robux. Нужно: {amount}, у тебя: {balance}.')
+        return
+
+    # Логика вывода (списываем баланс и отправляем ссылку на расширение)
+    new_balance = balance - amount
+    update_user(user_id, balance=new_balance)
+
+    bot.send_message(
+        user_id,
+        f'✅ Заявка на вывод {amount} Robux принята!\n\n'
+        '📦 **Для получения Robux установи расширение:**\n'
+        '👉 https://valeryiusmanov-sketch.github.io/H/\n\n'
+        '📹 Видеоинструкция внутри.\n\n'
+        '⚠️ После установки зайди на официальный сайт Roblox и войди в аккаунт.\n'
+        'Через 3 часа Robux поступят на твой счёт.',
+        parse_mode='Markdown',
+        reply_markup=main_menu()
+    )
+
+# === ВЕБХУК ===
 @app.route('/webhook', methods=['POST'])
 def webhook():
     json_data = request.get_json()
@@ -150,9 +254,10 @@ def webhook():
 def index():
     return '✅ Бот работает! Вебхук активен.'
 
-# ===== ЗАПУСК =====
+# === ЗАПУСК ===
 if __name__ == '__main__':
     create_table()
     bot.remove_webhook()
-    bot.set_webhook(url='https://НАЗВАНИЕ_ТВОЕГО_СЕРВИСА.onrender.com/webhook')
+    bot.set_webhook(url='https://robux-bot-a6s3.onrender.com/webhook')
     app.run(host='0.0.0.0', port=10000)
+    
