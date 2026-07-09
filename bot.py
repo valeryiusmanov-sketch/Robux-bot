@@ -87,6 +87,54 @@ def main_menu():
     return keyboard
 
 def withdraw_menu():
+    # === РУЛЕТКА ===
+@bot.message_handler(func=lambda message: message.text == '🎰 Крутить рулетку')
+def roulette(message):
+    user_id = message.chat.id
+    user = get_user(user_id)
+    balance = user[1]
+    
+    # Стоимость одного круга (например, 5 Robux)
+    cost = 5
+    if balance < cost:
+        bot.send_message(user_id, f'⛔ Недостаточно Robux. Нужно {cost} Robux для игры.')
+        return
+    
+    # Списываем стоимость
+    update_user(user_id, balance=balance - cost)
+    
+    # Анимация (отправляем одно сообщение и 3 раза его редактируем)
+    msg = bot.send_message(user_id, '🎰 **Рулетка крутится...**\n⏳ 10%...')
+    time.sleep(1)
+    
+    bot.edit_message_text(
+        '🎰 **Рулетка крутится...**\n⏳ 50%...',
+        chat_id=user_id,
+        message_id=msg.message_id
+    )
+    time.sleep(1)
+    
+    bot.edit_message_text(
+        '🎰 **Рулетка крутится...**\n⏳ 100%...',
+        chat_id=user_id,
+        message_id=msg.message_id
+    )
+    time.sleep(1)
+    
+    # Выпадает случайное число от 10 до 60
+    import random
+    win = random.randint(10, 60)
+    
+    # Начисляем выигрыш
+    new_balance = balance - cost + win
+    update_user(user_id, balance=new_balance)
+    
+    bot.edit_message_text(
+        f'🎉 **Вы выиграли {win} Robux!**\n\n'
+        f'💰 Баланс: {new_balance} Robux',
+        chat_id=user_id,
+        message_id=msg.message_id
+    )
     keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
     keyboard.add('💰 20', '💰 50', '💰 100')
     keyboard.add('💰 250', '💰 500', '💰 1000')
